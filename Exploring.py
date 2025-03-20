@@ -51,4 +51,4 @@ summary_df = pd.DataFrame(results).T
 # Compute the correlation matrix (only numeric columns are considered)
 corr_matrix = df.corr()
 
-df.to_csv('cleaned_detailed_supplier.csv')
+df.to_csv('cleaned_detailed_supplier.csv', index=False)
