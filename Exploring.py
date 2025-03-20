@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 df = pd.read_excel('Detailed Supplier.xlsx')
 
@@ -12,6 +14,17 @@ periods = df['period'].value_counts()
 na_percentage = df.isna().mean() * 100
 
 df.drop(columns={'href', 'Unnamed: 1', 'Vlookup Supplier Category'}, inplace=True)
+
+ext_income = df.loc[df['netExtraordinaryIncome'] > 0]
+
+cash_flow = df.loc[df['cashFromOperationsFromCashFlow'] > 0]
+
+ext_expense = df.loc[df['extraordinaryExpenses'] > 0]
+
+highly_absent_columns = ['cashFromOperationsFromCashFlow', 'extraordinaryIncome', 'extraordinaryExpenses',
+                         'netExtraordinaryIncome', 'shortTermProvisions', 'provisions', 'minorityInterestBalance', 'deferredTaxation']
+
+df.drop(columns=highly_absent_columns, inplace=True)
 
 # Prepare a dictionary to store the results for each column
 results = {}
@@ -35,4 +48,7 @@ for col in df.columns:
 # Convert the results dictionary into a DataFrame for a nicer display
 summary_df = pd.DataFrame(results).T
 
-df_2 = pd.read_excel('Financial Health Rating.xlsx')
+# Compute the correlation matrix (only numeric columns are considered)
+corr_matrix = df.corr()
+
+df.to_csv('cleaned_detailed_supplier.csv')
