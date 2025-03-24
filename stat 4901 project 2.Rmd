@@ -1,0 +1,45 @@
+---
+title: "project 2 stat 4901"
+author: "Jiajun Chen"
+date: "2025-03-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(randomForest)
+library(tree)
+library(lubridate)
+library(grid)
+library(glmnet)
+```
+
+```{r}
+fhr_data <- read.csv("cleaned_fhr_data.csv")
+extract_data <- read.csv("cleaned_detailed_supplier.csv")
+```
+
+```{r}
+na_percentage_fhr <- colSums(is.na(fhr_data)) / nrow(fhr_data) * 100
+na_percentage_extract <- colSums(is.na(extract_data)) / nrow(extract_data) * 100
+
+fhr_data<- fhr_data %>% mutate(risk= ifelse(Current.FHR >= 80, "very low risk", ifelse(Current.FHR >= 60, "low risk", ifelse(Current.FHR>= 40, "medium risk", ifelse(Current.FHR>=20, "high risk", "very high risk"))))) 
+
+
+fhr_data <- fhr_data %>%
+  mutate(Period.End.Date = as.Date(Period.End.Date, format = "%m/%d/%Y %H:%M"))
+```
+
+```{r}
+names(extract_data)[names(extract_data)=="Vlookup.Supplier.."]<- "Supplier.Number"
+fhr_static <- fhr_data %>%
+  select(Supplier.Number, Data.Source, Group, Group.Classification, Parent.ID)
+merged_data <- left_join(extract_data, fhr_static, by = "Supplier.Number")
+```
+
