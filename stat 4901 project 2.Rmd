@@ -23,6 +23,8 @@ library(glmnet)
 ```{r}
 fhr_data <- read.csv("cleaned_fhr_data.csv")
 extract_data <- read.csv("cleaned_detailed_supplier.csv")
+conversion_data <- read.csv("conversions.csv")
+inflation_data <- read.csv("inflation rate.csv")
 ```
 
 ```{r}
@@ -41,5 +43,22 @@ names(extract_data)[names(extract_data)=="Vlookup.Supplier.."]<- "Supplier.Numbe
 fhr_static <- fhr_data %>%
   select(Supplier.Number, Data.Source, Group, Group.Classification, Parent.ID)
 merged_data <- left_join(extract_data, fhr_static, by = "Supplier.Number")
+
 ```
 
+```{r}
+money_merge <- left_join(conversion_data, inflation_data, by = c("eqyYear" = "Year"))
+money_merge <- money_merge %>%
+  filter(!is.na(X.Other.Currency.to.USD))
+
+merged_data <- left_join(merged_data, adjustment_table, 
+                         by = c("eqyYear" = "eqyYear", "currency" = "currency"))
+
+merged_data <- merged_data %>%
+  mutate(Inflation.Rate.... = ifelse(
+    currency == "USD" & is.na(Inflation.Rate....),
+    inflation_data$Inflation.Rate....[match(eqyYear, inflation_data$Year)],
+    Inflation.Rate....
+  ))
+
+```
