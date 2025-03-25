@@ -53,7 +53,7 @@ money_merge <- left_join(conversion_data, inflation_data, by = c("eqyYear" = "Ye
 money_merge <- money_merge %>%
   filter(!is.na(X.Other.Currency.to.USD))
 
-merged_data <- left_join(merged_data, adjustment_table, 
+merged_data <- left_join(merged_data, money_merge, 
                          by = c("eqyYear" = "eqyYear", "currency" = "currency"))
 
 merged_data <- merged_data %>%
@@ -64,3 +64,5 @@ merged_data <- merged_data %>%
   ))
 
 ```
+
+
