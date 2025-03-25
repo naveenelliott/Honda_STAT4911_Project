@@ -42,6 +42,8 @@ fhr_data <- fhr_data %>%
 names(extract_data)[names(extract_data)=="Vlookup.Supplier.."]<- "Supplier.Number"
 fhr_static <- fhr_data %>%
   select(Supplier.Number, Data.Source, Group, Group.Classification, Parent.ID)
+fhr_static <- fhr_static %>%
+  distinct(Supplier.Number, .keep_all = TRUE)
 merged_data <- left_join(extract_data, fhr_static, by = "Supplier.Number")
 
 ```
