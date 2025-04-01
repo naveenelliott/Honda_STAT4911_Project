@@ -7,9 +7,9 @@ merged = pd.read_csv('final_merged_updated.csv')
 
 merged.drop(columns={'Unnamed: 0'}, inplace=True)
 
-merged = merged.sort_values(by=['Supplier.Number','financialDate'])
-
 merged['financialDate'] = pd.to_datetime(merged['financialDate'])
+
+merged = merged.sort_values(by=['Supplier.Number','financialDate'])
 
 # For each column in the DataFrame, create a new column with the immediate previous entry (grouped by Supplier.Number)
 for col in merged.columns:
