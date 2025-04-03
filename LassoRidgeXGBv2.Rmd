@@ -1,0 +1,303 @@
+---
+title: "Capstone2pt2"
+author: "Manasa Subramanian.191"
+date: "2025-04-01"
+output: html_document
+---
+
+```{r}
+library(broom)
+library(tidyr)
+library(R.utils)
+library(GGally)
+library(ggplot2)
+library(MASS)
+library(dplyr)
+library(foreign)
+library(tidyverse)
+library(readstata13)
+library(haven)
+library(ISLR)
+library(dplyr)
+library(corrplot)
+library(survival)
+library(knitr)
+library(readxl)
+library(data.table)
+library(haven)
+library(Amelia)
+library(priceR)
+library(randomForest)
+library(Metrics)
+library(dplyr)
+library(caret)
+library(glmnet)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+This is random forest to see importance of variables in comparison to the 
+```{r}
+set.seed(222)
+library(dplyr)
+df <- read_csv("final_previous_merged.csv")
+df[is.na(df)] <- 0
+df<-df %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
+split <- createDataPartition(df$FHR, p = 0.8, list = FALSE)
+
+train_data <- df[split, ]
+test_data <- df[-split, ]
+
+X_train <- train_data[, -which(names(train_data) == "FHR")]  
+y_train <- train_data$FHR 
+
+X_test <- test_data[, -which(names(test_data) == "FHR")]  
+y_test <- test_data$FHR
+
+rf_model <- randomForest(x = X_train, y = y_train, ntree = 500, importance = TRUE)
+y_prediction_rf <- predict(rf_model, newdata = test_data)
+mse_rf <- (sum((y_prediction_rf - y_test)^2)/length(y_prediction_rf))
+rmse_rf <- sqrt(mse_rf)
+print(rmse_rf)
+print(paste("RMSE: ",rmse_rf))
+imp <- importance(rf_model)
+sorted_importance <- sorted_importance <- imp[order(-imp[, 1]), ]
+summary(rf_model)
+```
+
+```{r}
+sorted_df <- as.data.frame(sorted_importance) %>%
+  head(30)  # Get top 30 important features
+
+# Plot top 10 feature importance
+ggplot(sorted_df, aes(x = reorder(rownames(sorted_df), -sorted_df[, 1]), y = sorted_df[, 1])) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Features", y = "Importance", title = "Top 10 Features by Importance")
+```
+As we can see here the following are of importance in predicting the FHR score:
+CHS
+debitOwnedWithinOneYear
+InterestExpense
+titalShareholderEquity
+Supplier.Number
+RRID
+bankCashBalances
+Parent.ID
+financialAssets
+Group
+totalCurrentLiabilites
+netProfitAfterTax
+termLoans
+netFundingCashFlow
+interestReceived
+
+RIDGE REGRESSION
+
+```{r}
+finaldf <- read_csv("final_previous_merged.csv")
+
+finaldf_ridge<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate'))
+```
+
+```{r}
+set.seed(222)
+split <- createDataPartition(finaldf_ridge$FHR, p = 0.8, list = FALSE)
+
+train_data <- finaldf_ridge[split, ]
+test_data <- finaldf_ridge[-split, ]
+
+X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
+y_train <- train_data$FHR 
+X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
+y_test <- test_data$FHR
+CV_ridge <- cv.glmnet(X_train,y_train,alpha = 0)
+summary(CV_lasso)
+#plotting the lambdas relation to coefficients
+plot(CV_ridge)
+#goodness of fit
+best_lambda <- CV_ridge$lambda.min
+y_predicted_ridge <- predict(CV_ridge,newx = X_test, s= "lambda.min")
+mse_ridge <- (sum((y_predicted_ridge - y_test)^2)/length(y_predicted_ridge))
+print(mse_ridge)
+rmse_ridge <- sqrt(mse_ridge)
+print(rmse_ridge)
+#ridge_coef <- coef(CV_ridge, s = "lambda.min")
+#print(ridge_coef)
+```
+
+Ridge has high mse, I will probably try later with a lambda variable: lambda.1se
+
+#Beginning of LASSO
+
+```{r}
+library(glmnet)
+finaldf <- read.csv("final_previous_merged.csv")
+finaldf[is.na(finaldf)] <- 0
+for(col in names(finaldf)) {
+  if(any(is.character(finaldf[[col]]))) {
+    print(paste("Column", col, "contains character values"))
+  }
+}
+```
+
+#LASSO
+
+```{r}
+
+finaldf_lasso<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate'))
+```
+
+```{r}
+sum(is.na(finaldf))
+```
+
+
+```{r}
+set.seed(222)
+split <- createDataPartition(finaldf_lasso$FHR, p = 0.8, list = FALSE)
+
+train_data <- finaldf_lasso[split, ]
+test_data <- finaldf_lasso[-split, ]
+
+X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
+y_train <- train_data$FHR 
+X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
+y_test <- test_data$FHR
+CV_lasso <- cv.glmnet(X_train,y_train,alpha = 1)
+summary(CV_lasso)
+#plotting the lambdas relation to coefficients
+plot(CV_lasso)
+print(CV_lasso)
+#goodness of fit
+best_lambda <- CV_lasso$lambda.min
+y_predicted_lasso <- predict(CV_lasso,newx = X_test, s= "lambda.min")
+mse_lasso <- (sum((y_predicted_lasso - y_test)^2)/length(y_predicted_lasso))
+print(mse_lasso)
+rmse_lasso <- sqrt(mse_lasso)
+print(rmse_lasso)
+lasso_coef <- coef(CV_lasso, s = "lambda.min")
+print(lasso_coef)
+```
+
+```{r}
+set.seed(222)
+cat("LASSO RMSE:", rmse_lasso, "\n")
+cat("Ridge RMSE:", rmse_ridge, "\n")
+```
+
+
+Now trying ridge with lambda.1se instead:
+```{r}
+finaldf <- read_csv("final_previous_merged.csv")
+
+finaldf_ridge_1se<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate'))
+```
+
+```{r}
+set.seed(222)
+split <- createDataPartition(finaldf_ridge_1se$FHR, p = 0.8, list = FALSE)
+
+train_data <- finaldf_ridge_1se[split, ]
+test_data <- finaldf_ridge_1se[-split, ]
+
+X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
+y_train <- train_data$FHR 
+X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
+y_test <- test_data$FHR
+CV_ridge_1se <- cv.glmnet(X_train,y_train,alpha = 0)
+summary(CV_lasso)
+#plotting the lambdas relation to coefficients
+plot(CV_ridge_1se)
+#goodness of fit
+best_lambda <- CV_ridge_1se$lambda.min
+y_predicted_ridge_1se <- predict(CV_ridge_1se,newx = X_test, s= "lambda.1se")
+mse_ridge_1se <- (sum((y_predicted_ridge_1se - y_test)^2)/length(y_predicted_ridge_1se))
+print(mse_ridge_1se)
+rmse_ridge_1se <- sqrt(mse_ridge_1se)
+print(rmse_ridge_1se)
+#ridge_coef <- coef(CV_ridge, s = "lambda.min")
+#print(ridge_coef)
+```
+
+
+
+
+
+```{r}
+set.seed(222)
+library(xgboost)
+library(caret)
+library(dplyr)
+finaldf <- read.csv("final_previous_merged.csv")
+
+finaldf[is.na(finaldf)] <- 0 
+
+finaldf_xgboost<-finaldf %>% select(-prev_financialDate)
+
+set.seed(123) 
+split_index <- createDataPartition(finaldf_xgboost$FHR, p = 0.8, list = FALSE)
+train_data <- finaldf_xgboost[split_index, ]
+test_data <- finaldf_xgboost[-split_index, ]
+
+X_train <- as.matrix(train_data %>% select(-FHR))
+y_train <- train_data$FHR
+X_test <- as.matrix(test_data %>% select(-FHR))
+y_test <- test_data$FHR
+
+dtrain <- xgb.DMatrix(data = X_train, label = y_train)
+dtest <- xgb.DMatrix(data = X_test, label = y_test)
+params <- list(
+  objective = "reg:squarederror",  
+  eta = 0.1,                       
+  max_depth = 6,                   
+  min_child_weight = 1,            
+  subsample = 0.8,                 
+  colsample_bytree = 0.8           
+)
+
+cv_results <- xgb.cv(
+  params = params,
+  data = dtrain,
+  nrounds = 1000, 
+  nfold = 5,     
+  early_stopping_rounds = 50,
+  verbose = 0                    
+)
+
+best_n_rounds <- which.min(cv_results$evaluation_log$test_rmse_mean)
+xgb_model <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = best_n_rounds,
+  watchlist = list(train = dtrain, test = dtest),
+  verbose = 0
+)
+
+y_pred_xgb <- predict(xgb_model, dtest)
+xbg_mse <- mean((y_pred_xgb - y_test)^2)
+xgb_rmse <- sqrt(xbg_mse)
+
+print(paste("RMSE:", xgb_rmse))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
