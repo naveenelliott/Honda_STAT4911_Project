@@ -40,6 +40,6 @@ merged = merged[cols_to_keep]
 merged.fillna(0, inplace=True)
 
 merged.drop(columns={'prev_Supplier.Number', 'prev_Inflation.Rate....', 'prev_Parent.ID', 
-                     'prev_id', 'prev_RRID', 'prev_Group', 'prev_currency', 'prev_period'}, inplace=True)
+                     'prev_id', 'prev_RRID', 'prev_Group', 'prev_period'}, inplace=True)
 
 merged.to_csv('final_previous_merged.csv', index=False)
