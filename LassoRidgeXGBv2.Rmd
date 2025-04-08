@@ -44,6 +44,13 @@ train_data[is.na(train_data)] <- 0
 train_data<-train_data %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
 
 test_data = read_csv("final_future_merged.csv")
+
+train_cols <- names(train_data)
+test_cols <- names(test_data)
+
+# Find the columns that are in 'end' but not in 'most_recent_records'
+missing_columns <- setdiff(train_cols, test_cols)
+
 test_data[is.na(test_data)] <- 0
 test_data<-test_data %>% select(-c("inf_factor","X.Other.Currency.to.USD","financialDate"))
 
