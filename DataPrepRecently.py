@@ -19,4 +19,4 @@ most_recent_records = most_recent_records.loc[most_recent_records['eqyYear'] >= 
 
 most_recent_records = most_recent_records[most_recent_records['financialDate'] >= pd.to_datetime('2024-04-08')]
 
-merged.to_csv('final_future_merged.csv', index=False)
+most_recent_records.to_csv('final_future_merged.csv', index=False)

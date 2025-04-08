@@ -39,13 +39,13 @@ This is random forest to see importance of variables in comparison to the
 ```{r}
 set.seed(222)
 library(dplyr)
-df <- read_csv("final_previous_merged.csv")
-df[is.na(df)] <- 0
-df<-df %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
-split <- createDataPartition(df$FHR, p = 0.8, list = FALSE)
+train_data <- read_csv("final_previous_merged.csv")
+train_data[is.na(train_data)] <- 0
+train_data<-train_data %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
 
-train_data <- df[split, ]
-test_data <- df[-split, ]
+test_data = read_csv("final_future_merged.csv")
+test_data[is.na(test_data)] <- 0
+test_data<-test_data %>% select(-c("inf_factor","X.Other.Currency.to.USD","financialDate"))
 
 X_train <- train_data[, -which(names(train_data) == "FHR")]  
 y_train <- train_data$FHR 
