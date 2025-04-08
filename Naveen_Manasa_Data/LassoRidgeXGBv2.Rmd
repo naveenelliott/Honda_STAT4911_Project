@@ -39,118 +39,96 @@ This is random forest to see importance of variables in comparison to the
 ```{r}
 set.seed(222)
 library(dplyr)
-df <- read_csv("final_previous_merged.csv")
-df[is.na(df)] <- 0
-df<-df %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
-split <- createDataPartition(df$FHR, p = 0.8, list = FALSE)
+library(randomForest)
+library(readr)
 
-train_data <- df[split, ]
-test_data <- df[-split, ]
+# Read and preprocess the training data
+train_data <- read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_previous_merged.csv")
+train_data[is.na(train_data)] <- 0
+train_data <- train_data %>% 
+  select(-c("prev_inf_factor", "prev_X.Other.Currency.to.USD", "prev_financialDate"))
 
-X_train <- train_data[, -which(names(train_data) == "FHR")]  
-y_train <- train_data$FHR 
+# Read and preprocess the test data
+test_data <- read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_future_merged.csv")
+test_data[is.na(test_data)] <- 0
+test_data <- test_data %>% 
+  select(-c("prev_inf_factor", "prev_X.Other.Currency.to.USD", "prev_financialDate"))
 
-X_test <- test_data[, -which(names(test_data) == "FHR")]  
+# Check which columns exist in your data to ensure "prev_supplier_number" exists.
+# Uncomment the next lines if needed.
+# print(names(train_data))
+# print(names(test_data))
+
+# Remove "FHR" and "prev_supplier_number" from the predictors
+# so that the supplier number is not used during training.
+X_train <- train_data %>% select(-FHR)
+y_train <- train_data$FHR
+
+# For the test set, do the same removal:
+X_test <- test_data %>% select(-prev_Supplier.Number)
 y_test <- test_data$FHR
 
+# Train the random forest model using only predictors (excluding the supplier number)
 rf_model <- randomForest(x = X_train, y = y_train, ntree = 500, importance = TRUE)
-y_prediction_rf <- predict(rf_model, newdata = test_data)
-mse_rf <- (sum((y_prediction_rf - y_test)^2)/length(y_prediction_rf))
-rmse_rf <- sqrt(mse_rf)
-print(rmse_rf)
-print(paste("RMSE: ",rmse_rf))
-imp <- importance(rf_model)
-sorted_importance <- sorted_importance <- imp[order(-imp[, 1]), ]
-summary(rf_model)
-```
 
-```{r}
-sorted_df <- as.data.frame(sorted_importance) %>%
-  head(10)  # Get top 30 important features
+# Make predictions on the test data
+y_prediction_rf <- predict(rf_model, newdata = X_test)
 
-ggplot(sorted_df, aes(x = reorder(rownames(sorted_df), -sorted_df[, 1]), y = sorted_df[, 1])) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() +
-  theme_minimal() +
-  labs(x = "Features", y = "Importance", title = "Top 10 Features by Importance")
+# Create a final dataframe that includes the predicted FHR and the supplier number from the test data
+final_predictions <- data.frame(
+  prev_supplier_number = test_data$prev_Supplier.Number,
+  predicted_FHR = y_prediction_rf
+)
+
+# Display the final dataframe
+print(final_predictions)
+
+write_csv(final_predictions, "predicted_FHR_supplier.csv")
 ```
-As we can see here the following are of importance in predicting the FHR score:
-CHS
-debitOwnedWithinOneYear
-InterestExpense
-titalShareholderEquity
-Supplier.Number
-RRID
-bankCashBalances
-Parent.ID
-financialAssets
-Group
-totalCurrentLiabilites
-netProfitAfterTax
-termLoans
-netFundingCashFlow
-interestReceived
 
 RIDGE REGRESSION
 
 ```{r}
-finaldf <- read_csv("final_previous_merged.csv")
-
-finaldf_ridge<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate'))
-```
-
-```{r}
-set.seed(222)
-split <- createDataPartition(finaldf_ridge$FHR, p = 0.8, list = FALSE)
-
-train_data <- finaldf_ridge[split, ]
-test_data <- finaldf_ridge[-split, ]
-
+# Prepare the training and test matrices (excluding the target variable FHR)
 X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
 y_train <- train_data$FHR 
-X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
-y_test <- test_data$FHR
-CV_ridge <- cv.glmnet(X_train,y_train,alpha = 0)
-summary(CV_lasso)
-#plotting the lambdas relation to coefficients
+X_test  <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
+y_test  <- test_data$FHR
+
+# Perform cross-validation for ridge regression (alpha = 0 indicates ridge)
+CV_ridge <- cv.glmnet(X_train, y_train, alpha = 0)
+
+# Optionally, look at a summary of the CV results (if desired)
+print(summary(CV_ridge))
+
+# Plot the cross-validation error vs. lambda values
 plot(CV_ridge)
-#goodness of fit
+
+# Identify the best lambda
 best_lambda <- CV_ridge$lambda.min
-y_predicted_ridge <- predict(CV_ridge,newx = X_test, s= "lambda.min")
-mse_ridge <- (sum((y_predicted_ridge - y_test)^2)/length(y_predicted_ridge))
-print(mse_ridge)
+cat("Best lambda:", best_lambda, "\n")
+
+# Predict on the test data using the best lambda
+y_predicted_ridge <- predict(CV_ridge, newx = X_test, s = "lambda.min")
+
+# Calculate Mean Squared Error (MSE) and Root Mean Squared Error (RMSE)
+mse_ridge <- mean((y_predicted_ridge - y_test)^2)
+cat("MSE:", mse_ridge, "\n")
 rmse_ridge <- sqrt(mse_ridge)
-print(rmse_ridge)
-#ridge_coef <- coef(CV_ridge, s = "lambda.min")
-#print(ridge_coef)
-ridge_coef <- coef(CV_ridge, s = "lambda.min")  # Extract coefficients at best lambda
-ridge_coef_df <- as.data.frame(as.matrix(ridge_coef))  # Convert to DataFrame
-ridge_coef_df$Feature <- rownames(ridge_coef_df)  # Add feature names
-colnames(ridge_coef_df) <- c("Coefficient", "Feature")
-ridge_coef_df <- ridge_coef_df[-1, ]  # Remove intercept
-ridge_coef_df$Abs_Coefficient <- abs(ridge_coef_df$Coefficient)  # Get absolute values
-ridge_coef_df <- ridge_coef_df[order(-ridge_coef_df$Abs_Coefficient), ]
-print(head(ridge_coef_df, 10))  # Top 10 most important features
-library(ggplot2)
-ggplot(head(ridge_coef_df, 10), aes(x = reorder(Feature, Abs_Coefficient), y = Abs_Coefficient)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() +
-  labs(title = "Top 10 Important Features in Ridge Regression",
-       x = "Feature", y = "Absolute Coefficient") +
-  theme_minimal()
+cat("RMSE:", rmse_ridge, "\n")
 
-```
+# Extract the ridge coefficients at the best lambda value
+ridge_coef <- coef(CV_ridge, s = "lambda.min")
 
+# Convert the coefficients to a data frame
+ridge_coef_df <- as.data.frame(as.matrix(ridge_coef))
+ridge_coef_df$Feature <- rownames(ridge_coef_df)
+colnames(ridge_coef_df)[1] <- "Coefficient"
 
-```{r}
-sorted_df <- as.data.frame(sorted_importance) %>%
-  head(10)  # Get top 30 important features
+# Remove the intercept (first row) and compute absolute coefficients
+ridge_coef_df <- ridge_coef_df[-1, ]
+ridge_coef_df$Abs_Coefficient <- abs(ridge_coef_df$Coefficient)
 
-ggplot(sorted_df, aes(x = reorder(rownames(sorted_df), -sorted_df[, 1]), y = sorted_df[, 1])) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() +
-  theme_minimal() +
-  labs(x = "Features", y = "Importance", title = "Top 10 Features by Importance for Ridge")
 ```
 
 
@@ -211,138 +189,6 @@ set.seed(222)
 cat("LASSO RMSE:", rmse_lasso, "\n")
 cat("Ridge RMSE:", rmse_ridge, "\n")
 ```
-
-
-Now trying ridge with lambda.1se instead:
-```{r}
-finaldf <- read_csv("final_previous_merged.csv")
-
-finaldf_ridge_1se<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate'))
-```
-
-```{r}
-set.seed(222)
-split <- createDataPartition(finaldf_ridge_1se$FHR, p = 0.8, list = FALSE)
-
-train_data <- finaldf_ridge_1se[split, ]
-test_data <- finaldf_ridge_1se[-split, ]
-
-X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
-y_train <- train_data$FHR 
-X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
-y_test <- test_data$FHR
-CV_ridge_1se <- cv.glmnet(X_train,y_train,alpha = 0)
-summary(CV_lasso)
-#plotting the lambdas relation to coefficients
-plot(CV_ridge_1se)
-#goodness of fit
-best_lambda <- CV_ridge_1se$lambda.min
-y_predicted_ridge_1se <- predict(CV_ridge_1se,newx = X_test, s= "lambda.1se")
-mse_ridge_1se <- (sum((y_predicted_ridge_1se - y_test)^2)/length(y_predicted_ridge_1se))
-print(mse_ridge_1se)
-rmse_ridge_1se <- sqrt(mse_ridge_1se)
-print(rmse_ridge_1se)
-ridge_coef <- coef(CV_ridge, s = "lambda.min")
-print(ridge_coef)
-```
-
-
-
-
-
-
-
-RANDOM FOREST FOR PREVIOUS FHR WITHOUT REMOVING ANUY COLUMNS
-(EXCEPT TARGET VARIABLE)
-
-```{r}
-set.seed(222)
-library(dplyr)
-df_final <- read_csv("final_previous_merged.csv")
-df_final[is.na(df_final)] <- 0
-split <- createDataPartition(df_final$FHR, p = 0.8, list = FALSE)
-
-train_data <- df_final[split, ]
-test_data <- df_final[-split, ]
-
-X_train <- train_data[, -which(names(train_data) == "FHR")]  
-y_train <- train_data$FHR 
-
-X_test <- test_data[, -which(names(test_data) == "FHR")]  
-y_test <- test_data$FHR
-
-rf_model <- randomForest(x = X_train, y = y_train, ntree = 500, importance = TRUE)
-y_prediction_rf <- predict(rf_model, newdata = test_data)
-mse_rf <- (sum((y_prediction_rf - y_test)^2)/length(y_prediction_rf))
-rmse_rf <- sqrt(mse_rf)
-print(rmse_rf)
-print(paste("RMSE: ",rmse_rf))
-imp <- importance(rf_model)
-sorted_importance <- sorted_importance <- imp[order(-imp[, 1]), ]
-summary(rf_model)
-```
-XGBOOST:
-
-```{r}
-set.seed(222)
-library(xgboost)
-library(caret)
-library(dplyr)
-finaldf <- read.csv("final_previous_merged.csv")
-
-finaldf[is.na(finaldf)] <- 0 
-
-finaldf_xgboost<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate','prev_currency'))
-
-set.seed(123) 
-split_index <- createDataPartition(finaldf_xgboost$FHR, p = 0.8, list = FALSE)
-train_data <- finaldf_xgboost[split_index, ]
-test_data <- finaldf_xgboost[-split_index, ]
-
-X_train <- as.matrix(train_data %>% select(-FHR))
-y_train <- train_data$FHR
-X_test <- as.matrix(test_data %>% select(-FHR))
-y_test <- test_data$FHR
-
-dtrain <- xgb.DMatrix(data = X_train, label = y_train)
-dtest <- xgb.DMatrix(data = X_test, label = y_test)
-params <- list(
-  objective = "reg:squarederror",  
-  eta = 0.1,                       
-  max_depth = 6,                   
-  min_child_weight = 1,            
-  subsample = 0.8,                 
-  colsample_bytree = 0.8           
-)
-
-cv_results <- xgb.cv(
-  params = params,
-  data = dtrain,
-  nrounds = 1000, 
-  nfold = 5,     
-  early_stopping_rounds = 50,
-  verbose = 0                    
-)
-
-best_n_rounds <- which.min(cv_results$evaluation_log$test_rmse_mean)
-xgb_model <- xgb.train(
-  params = params,
-  data = dtrain,
-  nrounds = best_n_rounds,
-  watchlist = list(train = dtrain, test = dtest),
-  verbose = 0
-)
-
-y_pred_xgb <- predict(xgb_model, dtest)
-xbg_mse <- mean((y_pred_xgb - y_test)^2)
-xgb_rmse <- sqrt(xbg_mse)
-
-print(paste("RMSE:", xgb_rmse))
-```
-
-
-
-
 
 
 
