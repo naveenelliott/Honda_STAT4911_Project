@@ -182,5 +182,3 @@ print("Intercept:", model.intercept_)
 
 
 del merged['CHS'], merged['prev_financialDate']
-
-merged.to_csv('final_merged.csv', index=False)

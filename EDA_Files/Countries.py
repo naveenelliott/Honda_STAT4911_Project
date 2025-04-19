@@ -15,7 +15,8 @@ order = sorted(merged['currency'].unique())
 # Create the figure and axis
 fig, ax = plt.subplots(figsize=(10, 6))
 
-colors = ['green', 'red', 'red', 'yellow', 'lightblue', 'red', 'orange', 'red', 'gray', 'green', 'red', 'red', 'lightblue']
+colors = ['#009b3a', '#D80621', '#DA291C', '#EE1C25', '#003399', '#CE1124', '#FF671F', 
+          '#BC002D', '#CD2E3A', '#006341', '#BA0C2F', '#FE0000', '#B31942']
 
 # Create the boxplot with the defined order
 sns.boxplot(data=merged, x='currency', y='FHR', ax=ax, order=order, palette=colors)
@@ -36,16 +37,6 @@ fig_text(
 
 # Get the x-axis tick positions; these correspond to the positions for 'order'
 tick_positions = ax.get_xticks()
-
-# Compute group medians for 'FHR' grouped by 'currency'
-group_medians = merged.groupby('currency')['FHR'].median()
-
-# Annotate each box with its median value using the same order
-for pos, cat in zip(tick_positions, order):
-    if cat in group_medians.index:
-        median_value = group_medians[cat]
-        ax.text(pos, median_value, f"{median_value:.0f}", ha='center', va='bottom', 
-                color='black', fontsize=10)
 
 # Remove the default tick labels so we can add custom ones
 ax.set_xticklabels([])
@@ -76,5 +67,18 @@ for pos, cat in zip(tick_positions, order):
 # Optionally, remove the top and right spines for a cleaner look
 ax.spines['right'].set_visible(False)
 ax.spines['top'].set_visible(False)
+
+# Compute the count of rows for each currency
+group_counts = merged.groupby('currency').size()
+
+# For each currency, determine a y-axis position slightly above its boxplot
+for pos, cat in zip(tick_positions, order):
+    count = group_counts.get(cat, 0)
+    # Determine a y position: here we use the maximum FHR value for that currency and add an offset.
+    max_val = merged[merged['currency'] == cat]['FHR'].max()
+    # The offset can be defined as a percentage of the max value (here, 5%)
+    offset = 0.025 * max_val
+    ax.text(pos, max_val + offset, f"N = {count}", ha='center', va='bottom', 
+            fontsize=10, color='#222222')
 
 plt.show()

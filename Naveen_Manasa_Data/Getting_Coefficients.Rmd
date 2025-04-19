@@ -1,0 +1,265 @@
+---
+title: "Capstone2pt2"
+author: "Manasa Subramanian.191"
+date: "2025-04-01"
+output: html_document
+---
+
+```{r}
+library(broom)
+library(tidyr)
+library(R.utils)
+library(GGally)
+library(ggplot2)
+library(MASS)
+library(dplyr)
+library(foreign)
+library(tidyverse)
+library(readstata13)
+library(haven)
+library(ISLR)
+library(dplyr)
+library(corrplot)
+library(survival)
+library(knitr)
+library(readxl)
+library(data.table)
+library(haven)
+library(Amelia)
+library(priceR)
+library(randomForest)
+library(Metrics)
+library(dplyr)
+library(caret)
+library(glmnet)
+```
+
+
+This is random forest to see importance of variables in comparison to the 
+```{r}
+set.seed(222)
+library(dplyr)
+train_data <- read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_previous_merged.csv")
+train_data[is.na(train_data)] <- 0
+train_data<-train_data %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
+
+test_data = read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_future_merged.csv")
+
+train_cols <- names(train_data)
+test_cols <- names(test_data)
+
+# Find the columns that are in 'end' but not in 'most_recent_records'
+missing_columns <- setdiff(train_cols, test_cols)
+
+test_data[is.na(test_data)] <- 0
+
+X_train <- train_data[, -which(names(train_data) == "FHR")]  
+y_train <- train_data$FHR 
+
+X_test <- test_data[, -which(names(test_data) == "FHR")]  
+y_test <- test_data$FHR
+
+rf_model <- randomForest(x = X_train, y = y_train, ntree = 500, importance = TRUE)
+y_prediction_rf <- predict(rf_model, newdata = test_data)
+mse_rf <- (sum((y_prediction_rf - y_test)^2)/length(y_prediction_rf))
+rmse_rf <- sqrt(mse_rf)
+print(rmse_rf)
+print(paste("RMSE: ",rmse_rf))
+imp <- importance(rf_model)
+sorted_importance <- sorted_importance <- imp[order(-imp[, 1]), ]
+summary(rf_model)
+```
+
+```{r}
+sorted_df <- as.data.frame(sorted_importance) %>%
+  head(10)  # Get top 10 important features
+
+rownames(sorted_df) <- gsub("prev_", "", rownames(sorted_df))
+
+ggplot(sorted_df, aes(x = reorder(rownames(sorted_df), sorted_df[, 1]),
+                      y = sorted_df[, 1],
+                      fill = sorted_df[, 1])) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  scale_fill_gradient(low = "lightblue", high = "red") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  labs(x = "Features", y = "Importance", title = "Top 10 Random Forest Lag 1 Features")
+```
+As we can see here the following are of importance in predicting the FHR score:
+CHS
+debitOwnedWithinOneYear
+InterestExpense
+titalShareholderEquity
+Supplier.Number
+RRID
+bankCashBalances
+Parent.ID
+financialAssets
+Group
+totalCurrentLiabilites
+netProfitAfterTax
+termLoans
+netFundingCashFlow
+interestReceived
+
+RIDGE REGRESSION
+
+```{r}
+finaldf_ridge <- read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_previous_merged.csv")
+
+finaldf_ridge<-finaldf_ridge %>% select(-c("prev_inf_factor","prev_X.Other.Currency.to.USD","prev_financialDate"))
+```
+
+```{r}
+set.seed(222)
+split <- createDataPartition(finaldf_ridge$FHR, p = 0.8, list = FALSE)
+
+train_data <- finaldf_ridge[split, ]
+train_data[is.na(train_data)] <- 0
+test_data <- finaldf_ridge[-split, ]
+
+X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
+y_train <- train_data$FHR 
+X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
+y_test <- test_data$FHR
+CV_ridge <- cv.glmnet(X_train,y_train,alpha = 0)
+#plotting the lambdas relation to coefficients
+plot(CV_ridge)
+#goodness of fit
+best_lambda <- CV_ridge$lambda.min
+y_predicted_ridge <- predict(CV_ridge,newx = X_test, s= "lambda.min")
+mse_ridge <- (sum((y_predicted_ridge - y_test)^2)/length(y_predicted_ridge))
+print(mse_ridge)
+rmse_ridge <- sqrt(mse_ridge)
+print(rmse_ridge)
+#ridge_coef <- coef(CV_ridge, s = "lambda.min")
+#print(ridge_coef)
+ridge_coef <- coef(CV_ridge, s = "lambda.min")  # Extract coefficients at best lambda
+ridge_coef_df <- as.data.frame(as.matrix(ridge_coef))  # Convert to DataFrame
+ridge_coef_df$Feature <- rownames(ridge_coef_df)  # Add feature names
+colnames(ridge_coef_df) <- c("Coefficient", "Feature")
+ridge_coef_df <- ridge_coef_df[-1, ]  # Remove intercept
+ridge_coef_df$Abs_Coefficient <- abs(ridge_coef_df$Coefficient)  # Get absolute values
+ridge_coef_df <- ridge_coef_df[order(-ridge_coef_df$Abs_Coefficient), ]
+
+ridge_coef_df$Feature <- gsub("prev_", "", ridge_coef_df$Feature)
+
+top10 <- ridge_coef_df %>% 
+  arrange(desc(Abs_Coefficient)) %>% 
+  head(10)
+
+ggplot(top10, aes(x = reorder(Feature, Coefficient), y = Coefficient, fill = Coefficient)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  scale_fill_gradient(low = "lightblue", high = "red") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  labs(x = "Features", y = "Coefficients", title = "Top 10 Ridge Lag 1 Coefficients")
+
+```
+
+
+```{r}
+sorted_df <- as.data.frame(sorted_importance) %>%
+  head(10)  # Get top 30 important features
+
+ggplot(sorted_df, aes(x = reorder(rownames(sorted_df), -sorted_df[, 1]), y = sorted_df[, 1])) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(x = "Features", y = "Importance", title = "Top 10 Features by Importance for Ridge")
+```
+
+
+#Beginning of LASSO
+
+```{r}
+library(glmnet)
+finaldf <- read.csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_previous_merged.csv")
+finaldf[is.na(finaldf)] <- 0
+for(col in names(finaldf)) {
+  if(any(is.character(finaldf[[col]]))) {
+    print(paste("Column", col, "contains character values"))
+  }
+}
+```
+
+#LASSO
+
+```{r}
+
+finaldf_lasso<-finaldf %>% select(-c('prev_X.Other.Currency.to.USD','prev_inf_factor','prev_financialDate'))
+```
+
+```{r}
+sum(is.na(finaldf))
+```
+
+
+```{r}
+set.seed(222)
+split <- createDataPartition(finaldf_lasso$FHR, p = 0.8, list = FALSE)
+
+train_data <- finaldf_lasso[split, ]
+test_data <- finaldf_lasso[-split, ]
+
+X_train <- as.matrix(train_data[, -which(names(train_data) == "FHR")])
+y_train <- train_data$FHR 
+X_test <- as.matrix(test_data[, -which(names(test_data) == "FHR")])
+y_test <- test_data$FHR
+CV_lasso <- cv.glmnet(X_train,y_train,alpha = 1)
+summary(CV_lasso)
+#plotting the lambdas relation to coefficients
+plot(CV_lasso)
+print(CV_lasso)
+#goodness of fit
+best_lambda <- CV_lasso$lambda.min
+y_predicted_lasso <- predict(CV_lasso,newx = X_test, s= "lambda.min")
+mse_lasso <- (sum((y_predicted_lasso - y_test)^2)/length(y_predicted_lasso))
+print(mse_lasso)
+rmse_lasso <- sqrt(mse_lasso)
+print(rmse_lasso)
+lasso_coef <- coef(CV_lasso, s = "lambda.min")
+print(lasso_coef)
+```
+
+```{r}
+set.seed(222)
+cat("LASSO RMSE:", rmse_lasso, "\n")
+cat("Ridge RMSE:", rmse_ridge, "\n")
+```
+
+```{r}
+lasso_coef_df <- as.data.frame(as.matrix(lasso_coef))  # Convert to DataFrame
+lasso_coef_df$Feature <- rownames(lasso_coef_df)  # Add feature names
+colnames(lasso_coef_df) <- c("Coefficient", "Feature")
+lasso_coef_df <- lasso_coef_df[-1, ]  # Remove intercept
+lasso_coef_df$Abs_Coefficient <- abs(lasso_coef_df$Coefficient)  # Get absolute values
+lasso_coef_df <- lasso_coef_df[order(-lasso_coef_df$Abs_Coefficient), ]
+
+lasso_coef_df$Feature <- gsub("prev_", "", lasso_coef_df$Feature)
+
+lasso_coef_df <- lasso_coef_df[lasso_coef_df$Abs_Coefficient != 0, ]
+
+top10 <- lasso_coef_df %>% 
+  arrange(desc(Abs_Coefficient)) %>% 
+  head(10)
+
+
+ggplot(top10, aes(x = reorder(Feature, Coefficient), y = Coefficient, fill = Coefficient)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme_minimal() +
+  scale_fill_gradient(low = "pink2", high = "red") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  labs(x = "Features", y = "Coefficients", title = "Top Lasso Lag 1 Coefficients")
+```
+
+

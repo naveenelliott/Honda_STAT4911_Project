@@ -1,0 +1,111 @@
+---
+title: "Capstone2pt2"
+author: "Manasa Subramanian.191"
+date: "2025-04-01"
+output: html_document
+---
+
+```{r}
+library(broom)
+library(tidyr)
+library(R.utils)
+library(GGally)
+library(ggplot2)
+library(MASS)
+library(dplyr)
+library(foreign)
+library(tidyverse)
+library(readstata13)
+library(haven)
+library(ISLR)
+library(dplyr)
+library(corrplot)
+library(survival)
+library(knitr)
+library(readxl)
+library(data.table)
+library(haven)
+library(Amelia)
+library(priceR)
+library(randomForest)
+library(Metrics)
+library(dplyr)
+library(caret)
+library(glmnet)
+```
+
+
+This is random forest to see importance of variables in comparison to the 
+```{r}
+set.seed(222)
+library(dplyr)
+library(randomForest)
+library(readr)
+
+# Read and preprocess the training data
+train_data <- read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_previous_merged.csv")
+train_data[is.na(train_data)] <- 0
+train_data <- train_data %>% 
+  select(-c("prev_inf_factor", "prev_X.Other.Currency.to.USD", "prev_financialDate"))
+
+# Read and preprocess the test data
+test_data <- read_csv("C:/Users/Owner/Downloads/SoccermaticsForPython-master/SoccermaticsForPython-master/Honda_STAT4911_Project/final_future_merged.csv")
+test_data[is.na(test_data)] <- 0
+test_data <- test_data %>% 
+  select(-c("prev_inf_factor", "prev_X.Other.Currency.to.USD", "prev_financialDate"))
+
+# Check which columns exist in your data to ensure "prev_supplier_number" exists.
+# Uncomment the next lines if needed.
+# print(names(train_data))
+# print(names(test_data))
+
+# Remove "FHR" and "prev_supplier_number" from the predictors
+# so that the supplier number is not used during training.
+X_train <- train_data %>% select(-FHR)
+y_train <- train_data$FHR
+
+# For the test set, do the same removal:
+X_test <- test_data %>% select(-prev_Supplier.Number)
+y_test <- test_data$FHR
+
+# Train the random forest model using only predictors (excluding the supplier number)
+rf_model <- randomForest(x = X_train, y = y_train, ntree = 500, importance = TRUE)
+
+# Make predictions on the test data
+y_prediction_rf <- predict(rf_model, newdata = X_test)
+
+# Create a final dataframe that includes the predicted FHR and the supplier number from the test data
+final_predictions <- data.frame(
+  prev_supplier_number = test_data$prev_Supplier.Number,
+  predicted_FHR = y_prediction_rf
+)
+
+# Display the final dataframe
+print(final_predictions)
+```
+
+```{r}
+lowest_suppliers <- final_predictions %>% 
+  arrange(predicted_FHR) %>% 
+  head(5) %>%
+  mutate(Group = "Lowest Suppliers")
+
+# Get the highest 5 suppliers and mark them as "Highest"
+highest_suppliers <- final_predictions %>% 
+  arrange(desc(predicted_FHR)) %>% 
+  head(5) %>%
+  mutate(Group = "Highest Suppliers")
+
+# Combine the two datasets into one data frame
+combined_suppliers <- bind_rows(lowest_suppliers, highest_suppliers)
+
+# Create a bar chart with ggplot2
+ggplot(combined_suppliers, aes(x = reorder(prev_supplier_number, predicted_FHR), y = predicted_FHR, fill = Group)) +
+  geom_col() +
+  scale_fill_manual(values = c("Highest Suppliers" = "darkgreen", "Lowest Suppliers" = "red")) +
+  labs(title = "Top 5 Highest and Lowest Suppliers Based on Lag 1 Random Forest Model",
+       x = "Supplier #", y = "Predicted FHR") +
+  coord_flip() +
+  theme_minimal()
+```
+
