@@ -1,0 +1,103 @@
+---
+title: "Data Preprocessing"
+author: "Jiajun Chen"
+date: "2025-04-23"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(randomForest)
+library(tree)
+library(lubridate)
+library(grid)
+library(glmnet)
+library(corrplot)
+library(tibble)
+```
+First, we import all the data set we are going to use including the currency conversion
+datasets.
+```{r}
+fhr_data <- read.csv("cleaned_fhr_data.csv")
+extract_data <- read.csv("cleaned_detailed_supplier.csv")
+conversion_data <- read.csv("conversions.csv")
+inflation_data <- read.csv("inflation rate.csv")
+```
+
+We add the risk levels that given in extract_data to fhr_data, and convert date columns into
+correct format
+```{r}
+fhr_data<- fhr_data %>% mutate(risk= ifelse(Current.FHR >= 80, "very low risk", ifelse(Current.FHR >= 60, "low risk", ifelse(Current.FHR>= 40, "medium risk", ifelse(Current.FHR>=20, "high risk", "very high risk"))))) 
+
+
+fhr_data <- fhr_data %>%
+  mutate(Period.End.Date = as.Date(Period.End.Date, format = "%m/%d/%Y %H:%M"))
+```
+
+Rename the column in extract_data to match the one in fhr_data for merging
+```{r}
+# convert Vlookup.Supplier.. into Supplier.Number
+names(extract_data)[names(extract_data)=="Vlookup.Supplier.."]<- "Supplier.Number"
+fhr_static <- fhr_data %>%
+  select(Supplier.Number, Data.Source, Group, Group.Classification, Parent.ID)
+fhr_static <- fhr_static %>%
+  distinct(Supplier.Number, .keep_all = TRUE)
+# merge the two datasets that we use for prediction
+merged_data <- left_join(extract_data, fhr_static, by = "Supplier.Number")
+
+```
+We now want to merge the currency conversion data into the merged financial health data
+```{r}
+# first merge the conversion_data and inflation_data by year
+money_merge <- left_join(conversion_data, inflation_data, by = c("eqyYear" = "Year"))
+# make sure all rows with valid conversion values
+money_merge <- money_merge %>%
+  filter(!is.na(X.Other.Currency.to.USD))
+# now merge the 
+merged_data <- left_join(merged_data, money_merge, 
+                         by = c("eqyYear" = "eqyYear", "currency" = "currency"))
+# check the inflation rate for usd and convert other currencies to USD
+merged_data <- merged_data %>%
+  mutate(Inflation.Rate.... = ifelse(
+    currency == "USD",
+    inflation_data$Inflation.Rate....[match(eqyYear, inflation_data$Year)],
+    Inflation.Rate....
+  ))
+merged_data <- merged_data %>%
+  mutate(X.Other.Currency.to.USD = ifelse(
+    currency == "USD",
+    1,
+    X.Other.Currency.to.USD
+  ))
+
+# write to new csv file
+write.csv(merged_data, "merged.csv")
+
+```
+
+
+After we get a data file with USD, we need to convert the monetary values into USD
+in 2025 since inflation need to be considered.
+## after merged
+```{r}
+final_merged <- read.csv("final_merged.csv")
+inflation_factor<- read.csv("inflation_factor.csv")
+# merge the financial health file with final inflation factor
+final_merged<-left_join(final_merged, inflation_factor, by = c("eqyYear" = "eqy_year"))
+# get non-monetary columns so we exclude them when we convert later
+non_monetary <- c("Supplier.Number", "eqyYear", "currency",
+                  "X.Other.Currency.to.USD", "inf_factor", "Inflation.Rate....", "FHR", "CHS")
+# convert based on inflation factor.
+final_merged <- final_merged %>% mutate(across(
+    .cols = where(is.numeric) & !non_monetary,
+    .fns = ~ . * final_merged$X.Other.Currency.to.USD* final_merged$inf_factor
+  ))
+# write to the csv file
+write.csv(final_merged, "final_merged_updated.csv")
+```
