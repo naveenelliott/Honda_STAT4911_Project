@@ -1,0 +1,186 @@
+---
+title: "PCR part"
+author: "Jiajun Chen"
+date: "2025-04-22"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+We want to see if using principal components help with building the predictive model.
+## Random Forest Model using Principal Components
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(randomForest)
+library(tree)
+library(lubridate)
+library(grid)
+library(glmnet)
+library(corrplot)
+library(tibble)
+library(nnet)
+set.seed(222)
+final_previous_merged <- read.csv("final_previous_merged.csv") # load new dataset
+
+final_previous_merged_updated<- final_previous_merged %>% mutate(risk= ifelse(FHR >= 80, "very low risk", ifelse(FHR >= 60, "low risk", ifelse(FHR>= 40, "medium risk", ifelse(FHR>=20, "high risk", "very high risk")))))
+
+# make sure all na values are converted to 0
+final_previous_merged_updated[is.na(final_previous_merged_updated)] <- 0
+
+# remove the currency conversion columns
+valid_cols <- final_previous_merged_updated %>%
+  select(where(is.numeric)) %>%
+  select(-prev_X.Other.Currency.to.USD, -prev_inf_factor) %>%
+  summarise(across(everything(), ~ mean(!is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "col", values_to = "non_na_ratio") %>%
+  pull(col)
+
+# also remove FHR to avoid it predicts itself
+numeric_data <- final_previous_merged_updated %>%
+  select(all_of(valid_cols)) %>%
+  select(-FHR) %>%
+  drop_na()
+
+nrow(numeric_data)
+
+# use Principal Component for modeling, use prcomp function to find number of PCs being used
+pca_result <- prcomp(numeric_data, scale. = TRUE)
+summary(pca_result)
+# we use 23 Principal Components not the elbow point because we want to maximize the accuracy 
+pca_df <- as.data.frame(pca_result$x[, 1:23])
+pca_df$FHR <- final_previous_merged_updated$FHR
+set.seed(222)
+train_index <- sample(nrow(pca_df), 0.8 * nrow(pca_df))
+train <- pca_df[train_index, ]
+test <- pca_df[-train_index, ]
+
+rf_model <- randomForest(FHR ~ ., data = train, ntree = 500, importance = TRUE)
+rf_pred <- predict(rf_model, newdata = test)
+# RMSE
+sqrt(mean((rf_pred - test$FHR)^2))
+print(rf_model)
+importance(rf_model)
+varImpPlot(rf_model)
+top_pcs <- c("PC4", "PC19", "PC18", "PC3")
+
+actual <- test$FHR
+# R^2
+ss_res <- sum((actual - rf_pred)^2)               # residual sum of squares
+ss_tot <- sum((actual - mean(actual))^2)          # total sum of squares
+r_squared <- 1 - (ss_res / ss_tot)
+cat("R-squared:", round(r_squared, 4))
+
+# this table shows how each top 4 components are consisted by different variables
+pc_loadings <- pca_result$rotation[, top_pcs]
+
+loading_table <- as.data.frame(pc_loadings) %>%
+  tibble::rownames_to_column("Variable") %>%
+  tidyr::pivot_longer(cols = all_of(top_pcs), names_to = "PC", values_to = "Loading") %>%
+  mutate(abs_loading = abs(Loading)) %>%
+  group_by(PC) %>%
+  slice_max(order_by = abs_loading, n = 10) %>%   # top 10 per PC
+  arrange(PC, desc(abs_loading))
+
+print(loading_table)
+
+# Show how the prediction fit visually
+ggplot(data = NULL, aes(x = test$FHR, y = rf_pred)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs Actual FHR", x = "Actual FHR", y = "Predicted FHR") +
+  theme_minimal()
+```
+First Random Forest model using PCs shows R^2: 0.7977, RMSE: 9.5322, which shows better
+than the baseline model.
+
+## Random Forest Model using original varaibles
+```{r}
+set.seed(222)
+train_index_og <- sample(nrow(final_previous_merged), 0.8 * nrow(final_previous_merged))
+train_og <- final_previous_merged[train_index, ]
+test_og <- final_previous_merged[-train_index, ]
+
+rf_model_og <- randomForest(FHR ~ . , data = train_og, ntree = 500, importance = TRUE )
+rf_pred_og <- predict(rf_model_og, newdata = test_og)
+sqrt(mean((rf_pred_og - test_og$FHR)^2))
+print(rf_model_og)
+importance(rf_model_og)
+actual_og <- test_og$FHR
+ss_res_og <- sum((actual_og - rf_pred_og)^2)
+ss_tot_og <- sum((actual_og - mean(actual_og))^2)
+r_squared_og <- 1 - (ss_res_og / ss_tot_og)
+cat("R-squared:", round(r_squared_og, 4))
+
+
+# Show how the prediction fit visually
+ggplot(data = NULL, aes(x = test_og$FHR, y = rf_pred_og)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Predicted vs Actual FHR", x = "Actual FHR", y = "Predicted FHR") +
+  theme_minimal()
+```
+The Random Forest model using the original variables shows R^2: 0.8091, RMSE: 9.2581, which shows better than the Random Forest model using PCs, suggests that we may want to stick to this model
+rather than use random forest model using PCs.
+
+We will try to use principal components for more models to see if it performs better.
+
+## GLM Model using PCs
+```{r}
+set.seed(222)
+model_glm <- glm(FHR ~ ., data = train, family = gaussian)
+summary(model_glm)
+glm_preds <- predict(model_glm, newdata = test)
+rmse <- sqrt(mean((glm_preds - test$FHR)^2))
+cat("RMSE:", round(rmse, 2))
+actual <- test$FHR
+ss_res2 <- sum((actual - glm_preds)^2)
+ss_tot2 <- sum((actual - mean(actual))^2)
+r_squared2 <- 1 - (ss_res2 / ss_tot2)
+cat("R-squared:", round(r_squared2, 4))
+
+# Show how the prediction fit visually
+ggplot(data = NULL, aes(x = test$FHR, y = glm_preds)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "GLM Predicted vs Actual FHR", x = "Actual FHR", y = "Predicted FHR") +
+  theme_minimal()
+
+```
+The GLM model using PCs shows R^2: 0.7988, RMSE: 9.51, which can not beat the random
+forest model using original variables.
+
+## Neural Network Model using PCs
+
+```{r}
+set.seed(222)
+nn_model <- nnet(FHR ~ ., data = pca_df, size = 5, linout = TRUE)
+nn_preds <- predict(nn_model, newdata = test)
+rmse_nn <- sqrt(mean((nn_preds - test$FHR)^2))
+cat("Neural Network RMSE:", round(rmse_nn, 2))
+
+actual <- test$FHR
+ss_res3 <- sum((actual - nn_preds)^2)
+ss_tot3 <- sum((actual - mean(actual))^2)
+r_squared2 <- 1 - (ss_res3 / ss_tot3)
+cat("R-squared:", round(r_squared2, 4))
+
+# Show how the prediction fit visually
+ggplot(data = NULL, aes(x = test$FHR, y = nn_preds)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Neural Network Predicted vs Actual FHR", x = "Actual FHR", y = "Predicted FHR") +
+  theme_minimal()
+
+```
+The Neural Network Model shows R^2: 0.8059, RMSE: 9.34, which is still not better
+than the Random Forest Model using the original variables.
+
+
+In conclusion, after testing different models using PCs, all those PCR models cannot beat
+the random forest model as predictive models, thus we may want to use Random Forest Model
+using the original variables to do the next step.
